@@ -1,0 +1,26 @@
+{
+	"name": "cohesion-agent-kit",
+	"version": "0.1.0",
+	"description": "What Cohesion actor clients share: configuration, pairing, task dispatch and state, and the run loop, on top of cohesion-ts.",
+	"type": "module",
+	"private": true,
+	"module": "index.ts",
+	"exports": {
+		".": "./index.ts"
+	},
+	"files": [
+		"index.ts",
+		"src"
+	],
+	"scripts": {
+		"check": "tsc --noEmit -p .",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"cohesion-ts": "file:../cohesion-ts"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"typescript": "^7"
+	}
+}
