@@ -13,3 +13,18 @@ export * from './src/task_store.ts';
 export * from './src/dispatch.ts';
 export * from './src/images.ts';
 export * from './src/transcript.ts';
+
+// The cohesion-ts types a client's code names most, so one import is enough.
+export type {
+	ActorDefinition,
+	ActorTask,
+	ActorTaskMessage,
+	ActorTaskReport,
+	ActorTaskStatus,
+	ActorUserContent,
+	Client,
+	ClientCall,
+	ClientCapabilities,
+	ClientImage,
+	Session,
+} from 'cohesion-ts';
