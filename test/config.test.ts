@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { localServer } from 'cohesion-ts';
 
-import { defaultConfigDirectory, loadConfig, runCli, saveConfig, setupLocal, TaskStore, withActor, withoutActor, type AppInfo } from '../index.ts';
+import { defaultConfigDirectory, loadConfig, runCli, saveConfig, setupLocal, SessionStore, withActor, withoutActor, type AppInfo } from '../index.ts';
 
 const app: AppInfo = { name: 'cohesion-demo', product: 'Demo' };
 const dir = () => mkdtempSync(join(tmpdir(), 'kit-'));
@@ -59,11 +59,11 @@ test('the CLI sets up, adds, lists, removes and runs', async () => {
 	expect(await cli('bogus')).toBe(2);
 });
 
-test('the task store persists and finds records', () => {
+test('the actor session store persists and finds records', () => {
 	const d = dir();
-	const store = new TaskStore<{ actor: string; model: string | null; effort: string | null; session: string }>(d);
-	store.put(7, { actor: 'a', model: null, effort: null, session: 's1' });
-	expect(new TaskStore<{ actor: string; model: string | null; effort: string | null; session: string }>(d).get(7)?.session).toBe('s1');
-	expect(store.find((r) => r.session === 's1')?.taskId).toBe(7);
-	expect(statSync(join(d, 'tasks.json')).mode & 0o777).toBe(0o600);
+	const store = new SessionStore<{ actor: string; model: string | null; effort: string | null; agentSession: string }>(d);
+	store.put(7, { actor: 'a', model: null, effort: null, agentSession: 's1' });
+	expect(new SessionStore<{ actor: string; model: string | null; effort: string | null; agentSession: string }>(d).get(7)?.agentSession).toBe('s1');
+	expect(store.find((r) => r.agentSession === 's1')?.sessionId).toBe(7);
+	expect(statSync(join(d, 'sessions.json')).mode & 0o777).toBe(0o600);
 });

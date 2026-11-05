@@ -1,7 +1,7 @@
 // Transcript text: what the user said as words, and a whole transcript as
-// text, for an agent picking up a task whose session it no longer has.
+// text, for an agent picking up an actor session whose agent session it no longer has.
 
-import type { ActorTaskMessage, ActorUserContent } from 'cohesion-ts';
+import type { ActorSessionMessage, ActorUserContent } from 'cohesion-ts';
 
 /**
  * What the user said, as words: a response to a request no longer waiting
@@ -28,7 +28,7 @@ export function describe(response: ActorUserContent): string {
  * A transcript as text, oldest first. `speaker` names the agent ("Claude");
  * `toolName` shows a tool's name as the client does elsewhere.
  */
-export function transcriptText(messages: ActorTaskMessage[], speaker: string, toolName: (name: string) => string = (name) => name): string {
+export function transcriptText(messages: ActorSessionMessage[], speaker: string, toolName: (name: string) => string = (name) => name): string {
 	return messages
 		.map(({ content }) => {
 			if (content.sender === 'user') {

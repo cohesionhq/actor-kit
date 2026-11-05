@@ -8,12 +8,12 @@ import { Client, type ClientCall, type ClientCapabilities, type ClientResult, ty
 
 import { loadConfig, type ActorEntry, type AppInfo, type Config } from './config.ts';
 
-/** What the service needs of whatever answers cohesiond's calls; `TaskHost` is one. */
+/** What the service needs of whatever answers cohesiond's calls; `SessionHost` is one. */
 export interface ServiceHost<A extends ActorEntry> {
 	/** Set by the service once it has a `Client`. */
 	client: Client;
 	onCall(call: ClientCall): Promise<ClientResult>;
-	onConnect(session: Session): Promise<void>;
+	onConnect(connection: Session): Promise<void>;
 	/** Told the actors on every reload of the config; a host that tracks them itself may leave it out. */
 	setActors?(actors: A[]): void;
 }
@@ -51,7 +51,7 @@ export class ActorService<A extends ActorEntry> {
 		const client = new Client(options.config.server, {
 			offers,
 			onCall: (call) => host.onCall(call),
-			onConnect: (session) => host.onConnect(session),
+			onConnect: (connection) => host.onConnect(connection),
 			onState: (state) => {
 				switch (state.kind) {
 					case 'online':

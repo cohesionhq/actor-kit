@@ -27,7 +27,7 @@ export function usage(app: AppInfo): string {
   add <directory> [--as <identifier>]        Offer ${app.product} in a directory
   remove <identifier>                        Stop offering one
   list                                       List the directories offered
-  run                                        Connect, and run Cohesion's tasks`;
+  run                                        Connect, and run Cohesion's actor sessions`;
 }
 
 /** Runs the command in `argv`; returns the process's exit code. */

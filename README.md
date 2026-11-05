@@ -3,16 +3,16 @@
 Build a [Cohesion](https://github.com/cohesionhq/cohesion) actor client
 without rewriting the parts every client needs.
 
-A Cohesion *actor* is a coding agent that cohesiond hands tasks to. The
-client that offers it has to pair with the daemon, keep a connection up, keep
-a config on disk, route four kinds of call to the right task, survive its own
-restarts, and ship a command line. None of that depends on which agent it is.
+A Cohesion *actor* is a coding agent that cohesiond hands actor sessions to.
+The client that offers it has to pair with the daemon, keep a connection up,
+keep a config on disk, route four kinds of call to the right actor session,
+survive its own restarts, and ship a command line. None of that depends on which agent it is.
 This kit is that part; you write the agent.
 
 ```
 cohesiond  ◄── cohesion-ts (protocol, connection) ◄── cohesion-agent-kit ◄── your client
                                                         config · pairing · CLI
-                                                        call routing · task store · run loop
+                                                        call routing · session store · run loop
                                                                               ▲
                                                            you: run the agent, report what it does
 ```
@@ -31,7 +31,7 @@ It is used by `cohesion-claude-code` and `cohesion-opencode`.
 - [What you implement](#what-you-implement)
 - [What the kit does for you](#what-the-kit-does-for-you)
 - [What the config directory holds](#what-the-config-directory-holds)
-- [Starting tasks from code](#starting-tasks-from-code)
+- [Starting actor sessions from code](#starting-actor-sessions-from-code)
 - [API reference](#api-reference)
 - [Testing your client](#testing-your-client)
 - [Not included](#not-included)
@@ -54,7 +54,7 @@ Use the same `tsconfig.json` as `cohesion-ts` (`moduleResolution: bundler`,
 `allowImportingTsExtensions`): the packages ship TypeScript source.
 
 The kit re-exports the `cohesion-ts` types a client names most (`Client`,
-`ClientCall`, `ActorTaskReport`, `ActorUserContent`, `ClientImage`, …), so one
+`ClientCall`, `ActorSessionReport`, `ActorUserContent`, `ClientImage`, …), so one
 import is usually enough. For the rest, import from `cohesion-ts`.
 
 ## Quick start: a client in one file
@@ -72,21 +72,21 @@ bun examples/echo/index.ts --config /tmp/echo run             # connects to cohe
 
 It has five parts, and so will your client.
 
-**1. A record of what must survive a restart.** Extend `TaskRecordBase`
+**1. A record of what must survive a restart.** Extend `SessionRecordBase`
 (`actor`, `model`, `effort`, `titled`, `title`) with whatever your agent needs
-to pick a task up again: a session id, a mode.
+to pick an actor session up again: an agent session id, a mode.
 
 ```ts
-interface EchoRecord extends TaskRecordBase {
+interface EchoRecord extends SessionRecordBase {
 	mode: string;
 }
 ```
 
-**2. A runner per task.** It receives what the user says, drives your agent,
-and reports back through `client.report`.
+**2. A runner per actor session.** It receives what the user says, drives your
+agent, and reports back through `client.report`.
 
 ```ts
-class EchoTask implements TaskRunner {
+class EchoSession implements SessionRunner {
 	async say(text: string, images: ClientImage[]) {
 		const reply = this.record.mode === 'loud' ? text.toUpperCase() : text;
 		await this.client.report(this.id, { kind: 'message', content: { kind: 'text', text: reply } });
@@ -101,18 +101,18 @@ class EchoTask implements TaskRunner {
 ```
 
 **3. An engine**, the only other agent-specific code: how to build a record
-when a task starts, how to rebuild one for a task you never had, which modes
-exist, and how to open a runner for a record.
+when an actor session starts, how to rebuild one for an actor session you never
+had, which modes exist, and how to open a runner for a record.
 
 ```ts
-const engine: TaskEngine<EchoRecord> = {
-	speaker: 'Echo',            // names the agent when a lost transcript is replayed
-	session: 'an Echo session', // "This task began in an Echo session that is no longer available"
+const engine: SessionEngine<EchoRecord> = {
+	speaker: 'Echo',                 // names the agent when a lost transcript is replayed
+	agentSession: 'an Echo session', // "This actor session began in an Echo session that is no longer available"
 	start: (actor, call) => ({ actor: actor.identifier, model: call.model, effort: call.effort, mode: /* … */, titled: /* … */ }),
-	recover: (actor, held) => ({ /* same, from cohesiond's copy of the task */ }),
+	recover: (actor, held) => ({ /* same, from cohesiond's copy of the actor session */ }),
 	checkMode: (actor, mode) => /* throw if not offered, else return it */,
 	withMode: (record, mode) => ({ ...record, mode }),
-	open: (id, record, actor, client) => new EchoTask(id, record, client, store),
+	open: (id, record, actor, client) => new EchoSession(id, record, client, store),
 };
 ```
 
@@ -133,8 +133,8 @@ const offers = (config: Config) => ({
 ```ts
 process.exit(await runCli({ app, run: async (directory) => {
 	const config = loadConfig<ActorEntry>(app, directory);
-	const store = new TaskStore<EchoRecord>(directory);
-	const host = new TaskHost(config.actors, engine(store), store, log);
+	const store = new SessionStore<EchoRecord>(directory);
+	const host = new SessionHost(config.actors, engine(store), store, log);
 	const service = await ActorService.create({ app, directory, config, host, offers, log });
 	await service.run(); // until SIGINT/SIGTERM or eviction
 } }));
@@ -142,19 +142,19 @@ process.exit(await runCli({ app, run: async (directory) => {
 
 ## What you implement
 
-The kit calls you; you report to cohesiond with `client.report(taskId, …)`
+The kit calls you; you report to cohesiond with `client.report(sessionId, …)`
 (the `client` your engine's `open` receives). Cohesion's actor rules are in
 `docs/actors.md`; the ones a runner most often gets wrong:
 
 | When | Report |
 | --- | --- |
-| The user speaks | Nothing: cohesiond marks the task `working` itself. |
+| The user speaks | Nothing: cohesiond marks the actor session `working` itself. |
 | The agent says or does something | A `message` (text, `toolUse`, `question`, `permission`, `plan`). A tool's result arrives later as an `end` naming the `toolUse` message. |
 | The agent needs the user (a question, a permission, a plan) | The request as a `message`, then `needsAttention`. The user's answer reaches `runner.hear`. |
 | A turn ends | `idle`. Always. |
-| The agent itself breaks | `failed`. Not for a refused tool or a stopped task. |
+| The agent itself breaks | `failed`. Not for a refused tool or a stopped actor session. |
 | Stop | `runner.stop()`: interrupt the agent and set your state idle. cohesiond sets the status. |
-| A reconnect | `runner.resync(report)`: for a task still going on, say its `status` and `progress` again. cohesiond forgot them. |
+| A reconnect | `runner.resync(report)`: for an actor session still going on, say its `status` and `progress` again. cohesiond forgot them. |
 
 Optionally report a `title` (only when the record's `titled` is `pending`, so
 a title the user gave is never replaced), a `context` (how full the window is)
@@ -162,7 +162,7 @@ and, per actor, `client.usage(actor, …)`. `sendable(images)` tidies and checks
 images against cohesiond's rules before you attach them to a message, so one
 bad image costs the image rather than the message.
 
-`runner.say` and `runner.hear` may be sync or async. For `startActorTask` the
+`runner.say` and `runner.hear` may be sync or async. For `startActorSession` the
 host awaits `say`: if it throws (a model the agent doesn't have), the call
 fails and the user sees your message.
 
@@ -172,19 +172,19 @@ fails and the user sees your message.
   `setup --local` uses a key for a daemon on this machine. Re-running setup
   keeps the actors already offered.
 - **The connection.** One `Client` that reconnects with backoff, offers on every
-  session, holds your reports while offline and sends them in order, and stops
+  connection, holds your reports while offline and sends them in order, and stops
   for good when cohesiond evicts the client.
 - **Hot reload.** Edit the config (`add`, `remove`) while `run` is going and the
   new offers are sent within a moment; no restart.
-- **Call routing.** `startActorTask`, `sendActorTaskMessage`, `stopActorTask`
-  and `setActorTaskMode` go to the right runner. Unknown actors and missing
+- **Call routing.** `startActorSession`, `sendActorSessionMessage`, `stopActorSession`
+  and `setActorSessionMode` go to the right runner. Unknown actors and missing
   directories are refused with a message the user sees.
-- **Picking tasks back up.** After a restart, a message for a task on disk
-  reopens its runner from the stored record. For a task this client never had
-  (its disk was lost), the host reads cohesiond's copy of the task and
-  transcript, calls `engine.recover`, and hands your agent the transcript as
+- **Picking actor sessions back up.** After a restart, a message for an actor
+  session on disk reopens its runner from the stored record. For an actor
+  session this client never had (its disk was lost), the host reads cohesiond's
+  copy of the actor session and transcript, calls `engine.recover`, and hands your agent the transcript as
   context along with the new message.
-- **Resync.** On each new session `runner.resync` is called for every runner.
+- **Resync.** On each new connection `runner.resync` is called for every runner.
 
 ## What the config directory holds
 
@@ -196,36 +196,37 @@ directory: they hold the client's key.
 | File | Owner | Contents |
 | --- | --- | --- |
 | `config.json` | `Config<A>` | `server` (how to reach and identify to cohesiond) and `actors` |
-| `tasks.json` | `TaskStore<R>` | Your records by Cohesion task id |
+| `sessions.json` | `SessionStore<R>` | Your records by Cohesion actor session id |
 
-`TaskStore` is the only durable state the kit keeps. Status and transcript
-are cohesiond's; read them back with `getActorTask` or `dispatchTask`.
+`SessionStore` is the only durable state the kit keeps. Status and transcript
+are cohesiond's; read them back with `getActorSession` or `dispatchSession`.
 
 To give each actor more than a directory (a default model, say), extend
-`ActorEntry`, pass your type as `A` to `loadConfig`, `TaskHost`, `TaskEngine` and
-`ActorService`, and read the extra fields in `offers`. `runCli`'s `add` writes only
-`identifier` and `directory`.
+`ActorEntry`, pass your type as `A` to `loadConfig`, `SessionHost`,
+`SessionEngine` and `ActorService`, and read the extra fields in `offers`.
+`runCli`'s `add` writes only `identifier` and `directory`.
 
-## Starting tasks from code
+## Starting actor sessions from code
 
-The other direction: a script or another client hands an actor a task and reads
-its state back.
+The other direction: a script or another client starts an actor session on an
+actor and reads its state back.
 
 ```ts
 import { Session } from 'cohesion-ts';
-import { dispatchTask } from 'cohesion-agent-kit';
+import { dispatchSession } from 'cohesion-agent-kit';
 
-const session = await Session.open(server);
-const task = await dispatchTask(session, { actor: { identifier: 'cohesion', product: 'Claude Code' }, prompt: 'Fix the flaky test', mode: 'plan' });
-await task.settled({ timeoutMs: 10 * 60_000 }); // polls until it stops working
-console.log(task.status, await task.lastText());
+const connection = await Session.open(server);
+const session = await dispatchSession(connection, { actor: { identifier: 'cohesion', product: 'Claude Code' }, prompt: 'Fix the flaky test', mode: 'plan' });
+await session.settled({ timeoutMs: 10 * 60_000 }); // polls until it stops working
+console.log(session.status, await session.lastText());
 ```
 
 `actor` is an id, or an `{ identifier, product? }` that must match exactly one
-actor. The actor's client has to be online. A `DispatchedTask` has `task` and
+actor. The actor's client has to be online. A `DispatchedSession` has `session` and
 `status` (as last read), `refresh()`, `messages()`, `lastText()`, `say(text)`,
 `stop()` and `settled({ pollMs = 1000, timeoutMs, until })`. It takes a
-`Client` or a `Session`; nothing is stored locally.
+`Client` or a `Session` (cohesion-ts's connection to cohesiond, not an actor
+session); nothing is stored locally.
 
 ## API reference
 
@@ -248,34 +249,34 @@ Everything is exported from the package root.
 `usage(app)` is its help text.
 
 **Run loop**: `ActorService.create({ app, directory, config, host, offers, afterOffer?, log })`.
-`host` is a `TaskHost` or anything with `client`, `onCall`, `onConnect` and
+`host` is a `SessionHost` or anything with `client`, `onCall`, `onConnect` and
 optionally `setActors`. `service.run()`, `service.reload()` and `service.client`
 (the cohesion-ts `Client`: `report`, `usage`, `request`, `offer`). `stderrLog()`
 makes a timestamped logger.
 
-**Tasks on the actor side**
+**Actor sessions on the actor side**
 
 | | |
 | --- | --- |
-| `TaskHost<R, A>(actors, engine, store, log)` | `onCall`, `onConnect`, `setActors`, `running`, `task(id)`, `adopt(id)`. |
-| `TaskEngine<R, A>` | `speaker`, `session`, `toolName?`, `start`, `recover`, `checkMode`, `withMode`, `open`. |
-| `TaskRunner` | `id`, `status`, `say`, `hear`, `stop`, `setMode`, `resync`. |
-| `TaskStore<R>(dir)` | `get`, `put`, `find(predicate)`. |
-| `TaskRecordBase` | `actor`, `model`, `effort`, `titled?`, `title?`. |
+| `SessionHost<R, A>(actors, engine, store, log)` | `onCall`, `onConnect`, `setActors`, `running`, `session(id)`, `adopt(id)`. |
+| `SessionEngine<R, A>` | `speaker`, `agentSession`, `toolName?`, `start`, `recover`, `checkMode`, `withMode`, `open`. |
+| `SessionRunner` | `id`, `status`, `say`, `hear`, `stop`, `setMode`, `resync`. |
+| `SessionStore<R>(dir)` | `get`, `put`, `find(predicate)`. |
+| `SessionRecordBase` | `actor`, `model`, `effort`, `titled?`, `title?`. |
 
-`host.adopt(taskId)` opens the runner of a stored task that has none: for an
-agent that wakes a session after a restart on its own (OpenCode's events, say).
+`host.adopt(sessionId)` opens the runner of a stored actor session that has none:
+for an agent that wakes an agent session after a restart on its own (OpenCode's events, say).
 
 **Helpers**: `sendable(images)`, `tidy`, `refusal`; `describe(userContent)`,
 `transcriptText(messages, speaker, toolName?)`.
 
-**Dispatch**: `dispatchTask(client, options)` and `DispatchedTask`, above.
+**Dispatch**: `dispatchSession(client, options)` and `DispatchedSession`, above.
 
 ## Testing your client
 
 The runner and engine are plain objects, so test them without a daemon, as
-the kit's own tests do (`test/host.test.ts`): build a `TaskHost` with your
-engine, a `TaskStore` on a temp directory, set `host.client` to a stub with a
+the kit's own tests do (`test/host.test.ts`): build a `SessionHost` with your
+engine, a `SessionStore` on a temp directory, set `host.client` to a stub with a
 `report`/`request`, and call `host.onCall(...)`. Test what a regression would
 quietly break: what your agent's events become, and that a turn always ends in
 `idle`. For the connection itself, cohesion-ts's `test/client.test.ts` has a
@@ -300,7 +301,7 @@ bun test
 
 Each piece is what `cohesion-claude-code` and `cohesion-opencode` already had,
 identical up to product names. Where they differed (the mode's field name,
-whether starting a task is async, a title on recovery), the difference became a
-`TaskEngine` method rather than an option. The record is generic so the kit
-never has to know what a session is. Anything only one agent needs stays in
-that client.
+whether starting an actor session is async, a title on recovery), the difference
+became a `SessionEngine` method rather than an option. The record is generic so
+the kit never has to know what an agent session is. Anything only one agent
+needs stays in that client.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // cohesion-echo: the smallest complete actor client built on the kit. It
 // offers an "agent" that answers every message by repeating it. Replace
-// `EchoTask.say` with a real agent and this is a working client.
+// `EchoSession.say` with a real agent and this is a working client.
 //
 //   bun examples/echo/index.ts --config /tmp/echo setup --local
 //   bun examples/echo/index.ts --config /tmp/echo add ~/some/project
@@ -9,8 +9,8 @@
 
 import {
 	ActorService,
-	TaskHost,
-	TaskStore,
+	SessionHost,
+	SessionStore,
 	describe,
 	loadConfig,
 	runCli,
@@ -21,15 +21,15 @@ import {
 	type Config,
 	type ActorUserContent,
 	type ClientImage,
-	type TaskEngine,
-	type TaskRecordBase,
-	type TaskRunner,
+	type SessionEngine,
+	type SessionRecordBase,
+	type SessionRunner,
 } from '../../index.ts';
 
 const app: AppInfo = { name: 'cohesion-echo', product: 'Echo' };
 
 /** 1. What survives a restart, beyond the kit's base fields: here, only the mode. */
-interface EchoRecord extends TaskRecordBase {
+interface EchoRecord extends SessionRecordBase {
 	mode: string;
 }
 
@@ -38,19 +38,19 @@ const MODES = [
 	{ identifier: 'plain', title: 'Plain', description: 'Repeats as said.' },
 ];
 
-/** 2. One task: what the user says goes to your agent; what it does is reported to Cohesion. */
-class EchoTask implements TaskRunner {
-	status: TaskRunner['status'] = 'idle';
+/** 2. One actor session: what the user says goes to your agent; what it does is reported to Cohesion. */
+class EchoSession implements SessionRunner {
+	status: SessionRunner['status'] = 'idle';
 
 	constructor(
 		readonly id: number,
 		private record: EchoRecord,
 		private readonly client: Client,
-		private readonly store: TaskStore<EchoRecord>,
+		private readonly store: SessionStore<EchoRecord>,
 	) {}
 
 	async say(text: string, _images: ClientImage[]): Promise<void> {
-		// cohesiond marks the task working itself when the user speaks.
+		// cohesiond marks the actor session working itself when the user speaks.
 		this.status = 'working';
 		const reply = this.record.mode === 'loud' ? text.toUpperCase() : text;
 		await this.client.report(this.id, { kind: 'message', content: { kind: 'text', text: reply } });
@@ -80,11 +80,11 @@ class EchoTask implements TaskRunner {
 }
 
 /** 3. The engine: how the host makes records and runners. This is all the agent-specific glue. */
-function engine(store: TaskStore<EchoRecord>): TaskEngine<EchoRecord> {
+function engine(store: SessionStore<EchoRecord>): SessionEngine<EchoRecord> {
 	const mode = (identifier: string | null) => MODES.find((m) => m.identifier === identifier)?.identifier ?? MODES[0]!.identifier;
 	return {
 		speaker: 'Echo',
-		session: 'an Echo session',
+		agentSession: 'an Echo session',
 		start: (actor, call) => ({
 			actor: actor.identifier,
 			model: call.model,
@@ -99,7 +99,7 @@ function engine(store: TaskStore<EchoRecord>): TaskEngine<EchoRecord> {
 			return identifier;
 		},
 		withMode: (record, identifier) => ({ ...record, mode: identifier }),
-		open: (id, record, _actor, client) => new EchoTask(id, record, client, store),
+		open: (id, record, _actor, client) => new EchoSession(id, record, client, store),
 	};
 }
 
@@ -121,8 +121,8 @@ process.exit(
 		run: async (directory) => {
 			const log = stderrLog();
 			const config = loadConfig<ActorEntry>(app, directory);
-			const store = new TaskStore<EchoRecord>(directory);
-			const host = new TaskHost(config.actors, engine(store), store, log);
+			const store = new SessionStore<EchoRecord>(directory);
+			const host = new SessionHost(config.actors, engine(store), store, log);
 			const service = await ActorService.create({ app, directory, config, host, offers, log });
 			await service.run();
 		},
