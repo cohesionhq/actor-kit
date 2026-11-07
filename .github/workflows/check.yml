@@ -18,19 +18,8 @@ jobs:
     name: Typecheck
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    defaults:
-      run:
-        working-directory: kit
     steps:
-      # package.json takes cohesion-ts from beside this checkout (file:../),
-      # so CI lays it out the same way, at the master of cohesionhq/ts.
       - uses: actions/checkout@v7
-        with:
-          path: kit
-      - uses: actions/checkout@v7
-        with:
-          repository: cohesionhq/ts
-          path: cohesion-ts
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4

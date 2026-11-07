@@ -18,7 +18,7 @@ cohesiond  ◄── cohesion-ts (protocol, connection) ◄── cohesion-agent
 ```
 
 The kit adds no protocol. Frames, requests and the protocol version live in
-[cohesion-ts](../cohesion-ts); the rules for what an actor reports live in
+[cohesion-ts](https://github.com/cohesionhq/ts); the rules for what an actor reports live in
 cohesion's `docs/actors.md`. The kit is Bun-only TypeScript and targets the
 current protocol only.
 
@@ -39,16 +39,20 @@ It is used by `cohesion-claude-code` and `cohesion-opencode`.
 
 ## Install
 
-The kit is a private repo, consumed the way the clients consume `cohesion-ts`:
-from a sibling checkout.
+The kit and `cohesion-ts` aren't published to npm. Depend on them from
+GitHub; `bun.lock` pins each to a commit, and `bun update cohesion-agent-kit
+cohesion-ts` moves to the latest.
 
 ```jsonc
 // package.json
 "dependencies": {
-	"cohesion-agent-kit": "file:../cohesion-agent-kit",
-	"cohesion-ts": "file:../cohesion-ts"
+	"cohesion-agent-kit": "github:cohesionhq/actor-kit",
+	"cohesion-ts": "github:cohesionhq/ts"
 }
 ```
+
+A client sees a change to either only once it's pushed and the client has
+run `bun update`.
 
 Use the same `tsconfig.json` as `cohesion-ts` (`moduleResolution: bundler`,
 `allowImportingTsExtensions`): the packages ship TypeScript source.

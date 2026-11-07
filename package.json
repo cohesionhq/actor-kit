@@ -17,7 +17,7 @@
 		"check": "tsc --noEmit -p ."
 	},
 	"dependencies": {
-		"cohesion-ts": "file:../cohesion-ts"
+		"cohesion-ts": "github:cohesionhq/ts"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
