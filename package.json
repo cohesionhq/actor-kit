@@ -3,6 +3,7 @@
 	"version": "0.1.0",
 	"description": "What Cohesion actor clients share: configuration, pairing, actor session dispatch and state, and the run loop, on top of cohesion-ts.",
 	"type": "module",
+	"license": "AGPL-3.0-only",
 	"private": true,
 	"module": "index.ts",
 	"exports": {

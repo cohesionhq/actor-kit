@@ -305,3 +305,9 @@ whether starting an actor session is async, a title on recovery), the difference
 became a `SessionEngine` method rather than an option. The record is generic so
 the kit never has to know what an agent session is. Anything only one agent
 needs stays in that client.
+
+## Licence
+
+Copyright © 2026 Jackson Zamorano.
+
+This is free software: you can redistribute it and modify it under the terms of the GNU Affero General Public License, version 3 only (AGPL-3.0-only). See [LICENSE](LICENSE).
