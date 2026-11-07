@@ -310,4 +310,4 @@ needs stays in that client.
 
 Copyright © 2026 Jackson Zamorano.
 
-This is free software: you can redistribute it and modify it under the terms of the GNU Affero General Public License, version 3 only (AGPL-3.0-only). See [LICENSE](LICENSE).
+Licensed under the MIT License. See [LICENSE](LICENSE).
