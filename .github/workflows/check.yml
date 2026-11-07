@@ -1,0 +1,38 @@
+name: Check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Type-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: kit
+    steps:
+      # package.json takes cohesion-ts from beside this checkout (file:../),
+      # so CI lays it out the same way, at the master of cohesionhq/ts.
+      - uses: actions/checkout@v7
+        with:
+          path: kit
+      - uses: actions/checkout@v7
+        with:
+          repository: cohesionhq/ts
+          path: cohesion-ts
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun run check

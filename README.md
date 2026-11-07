@@ -274,19 +274,20 @@ for an agent that wakes an agent session after a restart on its own (OpenCode's 
 
 ## Testing your client
 
-The runner and engine are plain objects, so test them without a daemon, as
-the kit's own tests do (`test/host.test.ts`): build a `SessionHost` with your
-engine, a `SessionStore` on a temp directory, set `host.client` to a stub with a
-`report`/`request`, and call `host.onCall(...)`. Test what a regression would
-quietly break: what your agent's events become, and that a turn always ends in
-`idle`. For the connection itself, cohesion-ts's `test/client.test.ts` has a
-fake daemon on a Unix socket.
+The runner and engine are plain objects, so test them without a daemon:
+build a `SessionHost` with your engine, a `SessionStore` on a temp directory,
+set `host.client` to a stub with a `report`/`request`, and call
+`host.onCall(...)`. Test what a regression would quietly break: what your
+agent's events become, and that a turn always ends in `idle`.
+
+The kit itself has no tests. To check it:
 
 ```sh
 bun install
 bun run check   # tsc, including the example
-bun test
 ```
+
+CI (`.github/workflows/check.yml`) runs the same on every push to `master`.
 
 ## Not included
 
