@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   check:
-    name: Type-check
+    name: Typecheck
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:
