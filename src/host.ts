@@ -6,10 +6,11 @@
 
 import { existsSync } from 'node:fs';
 
-import type { ActorCall, ActorSession, ActorSessionReport, ActorSessionStatus, ActorUserContent, Client, ClientCall, ClientImage, ClientResult, Session } from 'cohesion-ts';
+import type { ActorCall, ActorSession, ActorSessionStatus, ActorUserContent, Client, ClientCall, ClientImage, ClientResult, Session } from 'cohesion-ts';
 
 import type { ActorEntry } from './config.ts';
 import type { SessionRecordBase, SessionStore } from './session_store.ts';
+import { addressedReport, addressedTo, type AddressedReport } from './subagents.ts';
 import { describe, transcriptText } from './transcript.ts';
 
 /** One running actor session, as the host drives it. */
@@ -19,14 +20,23 @@ export interface SessionRunner {
 	readonly status: ActorSessionStatus;
 	/** Starts a turn with `text`, or adds it to the one under way. */
 	say(text: string, images: ClientImage[]): void | Promise<void>;
-	/** The user's message: more to do, or a response to a request. */
-	hear(content: ActorUserContent, images: ClientImage[]): void | Promise<void>;
+	/**
+	 * The user's message: more to do, or a response to a request. With
+	 * `subagent`, the response is to that subagent's request (its key, as its
+	 * `launch` named it): route it to that child, not the session.
+	 */
+	hear(content: ActorUserContent, images: ClientImage[], subagent?: string): void | Promise<void>;
 	/** Stops the turn under way; the actor session is idle until the user says more. */
 	stop(): Promise<void>;
 	/** Runs the actor session in `mode` from its next step on; it persists the record. */
 	setMode(mode: string): Promise<void>;
-	/** Reports where the actor session stands, for a connection that just began (cohesiond forgot). */
-	resync(report: (report: ActorSessionReport) => Promise<unknown>): Promise<void>;
+	/**
+	 * Reports where the actor session stands, for a connection that just began
+	 * (cohesiond forgot): its own status, and every subagent it still has, by
+	 * `Subagents.resync(report)`, which launches them again. Give `report` a
+	 * subagent's key as its second argument to address a child.
+	 */
+	resync(report: AddressedReport): Promise<void>;
 }
 
 /** What a client says about its agent so the host can run its actor sessions. */
@@ -82,7 +92,7 @@ export class SessionHost<R extends SessionRecordBase, A extends ActorEntry = Act
 				await this.start(call, actor);
 				break;
 			case 'sendActorSessionMessage':
-				await this.hear(call.session_id, actor, call.content, call.images ?? []);
+				await this.hear(call.session_id, actor, call.content, call.images ?? [], addressedTo(call));
 				break;
 			case 'stopActorSession':
 				await this.sessions.get(call.session_id)?.stop();
@@ -100,7 +110,7 @@ export class SessionHost<R extends SessionRecordBase, A extends ActorEntry = Act
 	/** Reports each actor session still going on to a connection that just began. */
 	readonly onConnect = async (connection: Session): Promise<void> => {
 		for (const session of this.sessions.values()) {
-			await session.resync((report) => connection.report(session.id, report)).catch((error: Error) => {
+			await session.resync(addressedReport(connection, session.id)).catch((error: Error) => {
 				this.log(`actor session ${session.id}: ${error.message}`);
 			});
 		}
@@ -142,11 +152,13 @@ export class SessionHost<R extends SessionRecordBase, A extends ActorEntry = Act
 	 * disk after a restart, or from Cohesion's transcript when this client never
 	 * had it.
 	 */
-	private async hear(sessionId: number, actor: A, content: ActorUserContent, images: ClientImage[]): Promise<void> {
+	private async hear(sessionId: number, actor: A, content: ActorUserContent, images: ClientImage[], subagent?: string): Promise<void> {
 		const running = this.sessions.get(sessionId);
-		if (running) return running.hear(content, images);
+		if (running) return running.hear(content, images, subagent);
 		const kept = this.store.get(sessionId);
-		if (kept) return this.open(sessionId, kept, actor).hear(content, images);
+		if (kept) return this.open(sessionId, kept, actor).hear(content, images, subagent);
+		// A subagent lives only in its parent's agent session: there is nothing to recover it from.
+		if (subagent) throw new Error(`Subagent ${subagent} of actor session ${sessionId} is no longer running here.`);
 
 		const [held, messages] = await Promise.all([
 			this.client.request('getActorSession', { id: sessionId }),

@@ -158,7 +158,7 @@ The kit calls you; you report to cohesiond with `client.report(sessionId, …)`
 | A turn ends | `idle`. Always. |
 | The agent itself breaks | `failed`. Not for a refused tool or a stopped actor session. |
 | Stop | `runner.stop()`: interrupt the agent and set your state idle. cohesiond sets the status. |
-| A reconnect | `runner.resync(report)`: for an actor session still going on, say its `status` and `progress` again. cohesiond forgot them. |
+| A reconnect | `runner.resync(report)`: for an actor session still going on, say its `status` and `progress` again, and launch its subagents again ([Subagents](#subagents)). cohesiond forgot them. |
 
 Optionally report a `title` (only when the record's `titled` is `pending`, so
 a title the user gave is never replaced), a `context` (how full the window is)
@@ -169,6 +169,34 @@ bad image costs the image rather than the message.
 `runner.say` and `runner.hear` may be sync or async. For `startActorSession` the
 host awaits `say`: if it throws (a model the agent doesn't have), the call
 fails and the user sees your message.
+
+## Subagents
+
+An agent that launches nested sessions (a Task tool, an agent thread, a child
+session) reports each as a *subagent*. It has no Cohesion id of its own: the
+client reports under the actor session Cohesion started, naming the child by
+the agent's own id. Keep a `Subagents` on the runner (`Subagents.of(client, id)`):
+
+| The agent… | Report |
+|---|---|
+| launches one (a `toolUse` was reported, giving `message_id`) | `await subagents.launch(key, { title, parent, message_id, agent_type, model, background })`, before anything else about it. An upsert; a repeat leaves the status alone. |
+| says or does something in it | `subagents.message(key, content)`, with `end(key, id)` for its tools. Its requests (permission, question) go here, not in the parent's transcript, then `setStatus(key, 'needsAttention')`. |
+| finishes it | `setStatus(key, 'idle')` ("Done"); `failed` when it broke. A killed task is `idle` too. |
+| keeps it going | `progress(key)` marks it working. |
+| `context`, `title` | `subagents.context(key, …)`, `subagents.title(key, …)`. |
+
+The user answers a child's request as `runner.hear(content, images, subagent)`;
+`subagent` is the child's key, left out for the session. A reconnect calls
+`runner.resync(report)`: `await this.subagents.resync(report)` launches every
+child again, parents first, and says its status (cohesiond settled the working
+ones `idle` when the connection dropped). Limits: 256 subagents per session at
+every depth, 4 deep, a key 256 bytes, `agent_type` 64, `model` 128, 2,000
+messages per subagent; `launch` checks the first three and cuts the strings.
+Without a `subagent`, every report is as it was.
+
+cohesion-ts doesn't declare `subagent` or `launch` yet: `subagents.ts` carries
+the types and `reportTo(client, id, report, subagent?)` sends them through
+`Client.report`, which passes the extra field along.
 
 ## What the kit does for you
 
@@ -264,7 +292,7 @@ makes a timestamped logger.
 | --- | --- |
 | `SessionHost<R, A>(actors, engine, store, log)` | `onCall`, `onConnect`, `setActors`, `running`, `session(id)`, `adopt(id)`. |
 | `SessionEngine<R, A>` | `speaker`, `agentSession`, `toolName?`, `start`, `recover`, `checkMode`, `withMode`, `open`. |
-| `SessionRunner` | `id`, `status`, `say`, `hear`, `stop`, `setMode`, `resync`. |
+| `SessionRunner` | `id`, `status`, `say`, `hear(content, images, subagent?)`, `stop`, `setMode`, `resync`. |
 | `SessionStore<R>(dir)` | `get`, `put`, `find(predicate)`. |
 | `SessionRecordBase` | `actor`, `model`, `effort`, `titled?`, `title?`. |
 
